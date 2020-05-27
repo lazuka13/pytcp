@@ -26,27 +26,27 @@ class TCPPacket:
         self.data_offset = 160  # no options support
 
         # flags (all zero by default)
-        self.flag_rsv = (0 << 9)
-        self.flag_noc = (0 << 8)
-        self.flag_cwr = (0 << 7)
-        self.flag_ecn = (0 << 6)
-        self.flag_urg = (0 << 5)
-        self.flag_ack = (0 << 4)
-        self.flag_psh = (0 << 3)
-        self.flag_rst = (0 << 2)
-        self.flag_syn = (1 << 1)
+        self.flag_rsv = 0
+        self.flag_noc = 0
+        self.flag_cwr = 0
+        self.flag_ecn = 0
+        self.flag_urg = 0
+        self.flag_ack = 0
+        self.flag_psh = 0
+        self.flag_rst = 0
+        self.flag_syn = (0 << 1)
         self.flag_fin = 0
 
         self.window_size = socket.htons(5840)  # TODO define
-        self.checksum = 0  # set in parse or build
+        self.__checksum = 0  # do not set!
         self.urgent_point = 0  # not supported
 
         self.payload = payload
 
     def serialize_flags(self):
-        return self.flag_rsv + self.flag_noc + self.flag_cwr + \
-               self.flag_ecn + self.flag_urg + self.flag_ack + \
-               self.flag_psh + self.flag_rst + self.flag_syn + self.flag_fin
+        return (self.flag_rsv << 9) + (self.flag_noc << 8) + (self.flag_cwr << 7) + \
+               (self.flag_ecn << 6) + (self.flag_urg << 5) + (self.flag_ack << 4) + \
+               (self.flag_psh << 3) + (self.flag_rst << 2) + (self.flag_syn << 1) + self.flag_fin
 
     def deserialize_flags(self, flags):
         self.flag_rsv = (flags >> 9) & 1
@@ -66,8 +66,7 @@ class TCPPacket:
                            self.window_size, checksum, self.urgent_point)
 
     def serialize(self):
-        self.checksum = self.calculate_checksum()
-        return self._serialize(self.checksum) + self.payload
+        return self._serialize(self.calculate_checksum()) + self.payload
 
     def calculate_checksum(self):
         _serialized = self._serialize(0)
@@ -77,7 +76,7 @@ class TCPPacket:
         return build_checksum(total)
 
     def validate_checksum(self):
-        if self.calculate_checksum() != self.checksum:
+        if self.calculate_checksum() != self.__checksum:
             return False
         return True
 
@@ -100,21 +99,8 @@ class TCPPacket:
                         source_ip=source_ip, destination_ip=destination_ip, seq=seq, ack=ack, payload=payload)
         obj.data_offset = data_offset
         obj.window_size = window_size
-        obj.checksum = checksum
+        obj.__checksum = checksum
         obj.urgent_point = urgent_point
         obj.deserialize_flags(flags)
         obj.validate_checksum()
         return obj
-
-    def dict(self):
-        return {
-            "type": "TCP",
-            "source_port": self.source_port,
-            "destination_port": self.destination_port,
-            "seq": self.seq,
-            "ack": self.ack,
-            "data_offset": self.data_offset,
-            "window_size": self.window_size,
-            "checksum": self.checksum,
-            "urgent_point": self.urgent_point,
-        }
