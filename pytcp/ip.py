@@ -5,7 +5,7 @@ import struct
 class IPPacket:
     SERIALIZE = '!BBHHHBBH4s4s'
 
-    def __init__(self):
+    def __init__(self, source_ip_addr: str, destination_ip_addr: str, payload: bytes):
         """
         Basic IPPacket class
         No options support - so ip_internet_header_length is fixed to 5
@@ -17,7 +17,7 @@ class IPPacket:
         ecn = 0  # not supported
         self.dscp = (dscp << 2) + ecn
         # total length is in bytes, header = 20 bytes + len(payload)
-        self.total_length = 20
+        self.total_length = 20 + len(payload)
         self.identification = 0  # not used
         # flags
         self.flag_reserved = 0
@@ -28,74 +28,49 @@ class IPPacket:
         self.ttl = 255  # disable ttl
         self.protocol = socket.IPPROTO_TCP  # payload == TCP packet
         self.header_checksum = 0  # TODO add header_checksum calculation and validation
-        self.source_ip_addr = None  # set in build() or parse()
-        self.destination_ip_addr = None  # set in build() or parse()
+        self.source_ip_addr = source_ip_addr  # set in build() or parse()
+        self.destination_ip_addr = destination_ip_addr  # set in build() or parse()
         # no options
-        self.payload = bytes()
-
-        # for validation
-        self.is_built = False
-
-    def build(self, source: str, destination: str, payload: bytes):
-        assert not self.is_built
-        self.source_ip_addr = socket.inet_aton(source)
-        self.destination_ip_addr = socket.inet_aton(destination)
         self.payload = payload
-        self.total_length += len(payload)
-
-        # for validation
-        self.is_built = True
 
     def serialize(self):
-        assert self.is_built
         return struct.pack(
             IPPacket.SERIALIZE,
             (self.version << 4) + self.internet_header_length,
             self.dscp,
             self.total_length,
             self.identification,
-            (self.flag_reserved << 7) + (self.flag_dont_fragment << 6) +
-            (self.flag_more_fragments << 5) + self.fragment_offset,
+            (self.flag_reserved << 15) + (self.flag_dont_fragment << 14) +
+            (self.flag_more_fragments << 13) + self.fragment_offset,
             self.ttl,
             self.protocol,
             self.header_checksum,
-            self.source_ip_addr,
-            self.destination_ip_addr
+            socket.inet_aton(self.source_ip_addr),
+            socket.inet_aton(self.destination_ip_addr)
         ) + self.payload
 
     @staticmethod
     def deserialize(payload: bytes):
-        obj = IPPacket()
         unpacked = struct.unpack(IPPacket.SERIALIZE, payload[:20])
-        version_header_length, obj.dscp, obj.total_length = unpacked[0:3]
-        obj.version = version_header_length >> 4
-        obj.internet_header_length = version_header_length - (obj.version << 4)
-        obj.identification, flags = unpacked[3:5]
-        obj.flag_reserved = (flags >> 7) & 1
-        obj.flag_dont_fragment = (flags >> 6) & 1
-        obj.flag_more_fragments = (flags >> 5) & 1
-        obj.ttl, obj.protocol, obj.header_checksum = unpacked[5:8]
-        obj.source_ip_addr = unpacked[8]
-        obj.destination_ip_addr = unpacked[9]
-        if obj.total_length > 20:
-            obj.payload = payload[20:obj.total_length]
+        version_header_length, dscp, total_length = unpacked[0:3]
+        version = version_header_length >> 4
+        internet_header_length = version_header_length - (version << 4)
+        identification, flags = unpacked[3:5]
+        flag_reserved = (flags >> 15) & 1
+        flag_dont_fragment = (flags >> 14) & 1
+        flag_more_fragments = (flags >> 13) & 1
+        ttl, protocol, header_checksum = unpacked[5:8]
+        source_ip_addr = socket.inet_ntoa(unpacked[8])
+        destination_ip_addr = socket.inet_ntoa(unpacked[9])
+        obj = IPPacket(source_ip_addr=source_ip_addr, destination_ip_addr=destination_ip_addr,
+                       payload=payload[20:total_length])
+        obj.version = version
+        obj.internet_header_length = internet_header_length
+        obj.identification = identification
+        obj.flag_reserved = flag_reserved
+        obj.flag_dont_fragment = flag_dont_fragment
+        obj.flag_more_fragments = flag_more_fragments
+        obj.ttl = ttl
+        obj.protocol = protocol
+        obj.header_checksum = header_checksum
         return obj
-
-    def dict(self):
-        return {
-            "type": "IP",
-            "version": self.version,
-            "internet_header_length": self.internet_header_length,  # should be 5
-            "dscp": self.dscp,
-            "total_length": self.total_length,
-            "identification": self.identification,
-            "flag_reserved": self.flag_reserved,
-            "flag_dont_fragment": self.flag_dont_fragment,
-            "flag_more_fragments": self.flag_more_fragments,
-            "ttl": self.ttl,
-            "protocol": self.protocol,
-            "header_checksum": self.header_checksum,
-            "source_ip_addr": socket.inet_ntoa(self.source_ip_addr),
-            "destination_ip_addr": socket.inet_ntoa(self.destination_ip_addr),
-            "payload": self.payload.decode(),
-        }
