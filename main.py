@@ -11,9 +11,8 @@ parser.add_argument('--type', dest='type')
 
 
 def sender():
-    sock_send = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(ETH_P_IP))
+    sock_send = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(ETH_P_ALL))
     message = bytes('hell'.encode('utf-8'))
-
     tcp_packet = TCPPacket(source_port=10000, destination_port=20000, source_ip="10.0.0.10",
                            destination_ip="10.0.0.11", seq=0, ack=0, payload=message)
     pprint.pprint(tcp_packet.__dict__)
@@ -24,7 +23,7 @@ def sender():
     ethernet_packet = EthernetPacket(source_mac="08:00:27:cc:09:cd",
                                      destination_mac="08:00:27:f9:6c:24",
                                      protocol=ETH_P_IP, payload=ip_packet).serialize()
-    sock_send.sendto(ethernet_packet, ('eth1', ETH_P_IP))
+    sock_send.sendto(ethernet_packet, ('eth1', ETH_P_ALL))
     sock_send.close()
 
 

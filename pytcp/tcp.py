@@ -13,7 +13,7 @@ def build_checksum(message):
 
 
 class TCPPacket:
-    SERIALIZE = "!HHLLBBHHH"
+    SERIALIZE = "!HHLLHHHH"
 
     def __init__(self, source_port: int, destination_port: int, source_ip: str,
                  destination_ip: str, seq: int, ack: int, payload: bytes):
@@ -23,13 +23,9 @@ class TCPPacket:
         self.destination_ip = destination_ip
         self.seq, self.ack = seq, ack
 
-        self.data_offset = 160  # no options support
+        self.data_offset = 5  # no options support
 
         # flags (all zero by default)
-        self.flag_rsv = 0
-        self.flag_noc = 0
-        self.flag_cwr = 0
-        self.flag_ecn = 0
         self.flag_urg = 0
         self.flag_ack = 0
         self.flag_psh = 0
@@ -44,25 +40,22 @@ class TCPPacket:
         self.payload = payload
 
     def serialize_flags(self):
-        return (self.flag_rsv << 9) + (self.flag_noc << 8) + (self.flag_cwr << 7) + \
-               (self.flag_ecn << 6) + (self.flag_urg << 5) + (self.flag_ack << 4) + \
-               (self.flag_psh << 3) + (self.flag_rst << 2) + (self.flag_syn << 1) + self.flag_fin
+        return (self.flag_urg << 5) + (self.flag_ack << 4) + \
+               (self.flag_psh << 3) + (self.flag_rst << 2) + \
+               (self.flag_syn << 1) + self.flag_fin + (self.data_offset << 12)
 
     def deserialize_flags(self, flags):
-        self.flag_rsv = (flags >> 9) & 1
-        self.flag_noc = (flags >> 8) & 1
-        self.flag_cwr = (flags >> 7) & 1
-        self.flag_ecn = (flags >> 6) & 1
         self.flag_urg = (flags >> 5) & 1
         self.flag_ack = (flags >> 4) & 1
         self.flag_psh = (flags >> 3) & 1
         self.flag_rst = (flags >> 2) & 1
         self.flag_syn = (flags >> 1) & 1
         self.flag_fin = flags & 1
+        self.data_offset = flags >> 12
 
     def _serialize(self, checksum):
         return struct.pack(self.SERIALIZE, self.source_port, self.destination_port,
-                           self.seq, self.ack, self.data_offset, self.serialize_flags(),
+                           self.seq, self.ack, self.serialize_flags(),
                            self.window_size, checksum, self.urgent_point)
 
     def serialize(self):
@@ -92,9 +85,10 @@ class TCPPacket:
         unpacked = struct.unpack(TCPPacket.SERIALIZE, payload[:20])
         source_port, destination_port = unpacked[0:2]
         seq, ack = unpacked[2], unpacked[3]
-        data_offset, flags, window_size = unpacked[4:7]  # TODO: parse flags
-        checksum, urgent_point = unpacked[7], unpacked[8]
-        payload = payload[int(data_offset / 8):]
+        flags, window_size = unpacked[4:6]
+        data_offset = flags >> 12
+        checksum, urgent_point = unpacked[6], unpacked[7]
+        payload = payload[int(data_offset * 32 / 8):]
         obj = TCPPacket(source_port=source_port, destination_port=destination_port,
                         source_ip=source_ip, destination_ip=destination_ip, seq=seq, ack=ack, payload=payload)
         obj.data_offset = data_offset
