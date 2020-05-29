@@ -5,7 +5,7 @@ import struct
 def build_checksum(message):
     s = 0
     for i in range(0, len(message), 2):
-        a, b = message[i], message[i + 1]
+        a, b = message[i], message[i + 1] if i + 1 < len(message) else 0
         s = s + (a + (b << 8))
     s = s + (s >> 16)
     s = ~s & 0xffff
@@ -38,6 +38,23 @@ class TCPPacket:
         self.urgent_point = 0  # not supported
 
         self.payload = payload
+
+    def has_flags(self, *flags):
+        for flag in flags:
+            if not getattr(self, f"flag_{flag}", False):
+                return False
+        return True
+
+    def has_only_flags(self, *flags):
+        for flag in ["urg", "ack", "psh", "rst", "syn", "fin"]:
+            if flag in flags:
+                # need presence
+                if not getattr(self, f"flag_{flag}", False):
+                    return False
+            else:
+                if getattr(self, f"flag_{flag}", False):
+                    return False
+        return True
 
     def serialize_flags(self):
         return (self.flag_urg << 5) + (self.flag_ack << 4) + \

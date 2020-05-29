@@ -1,1 +1,2 @@
-scapy
+scapy~=2.4.3
+click~=7.1.2
